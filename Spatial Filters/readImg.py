@@ -3,6 +3,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 
+##### Global(ish) variables
 # . = local directory (folder) that this file is in
 #picURL = "C:\\Users\\someUser\\What A Beautiful Folder\\Image Processing\\Another Folder\\box.png"
 picURL = ".\\box.png"
@@ -11,6 +12,7 @@ picURL = ".\\box.png"
 picURL = ".\\Test.png"
 #picURL = ".\\Dog.jpg"
 bitPrecision_boxImg = np.uint8		# 8 bits per pixel
+saveModdedImg = True
 
 
 # https://stackoverflow.com/questions/72459847/how-to-save-a-tkinter-canvas-as-an-image
@@ -51,7 +53,7 @@ def moveFigureTo(fig, x, y):
         fig.canvas.manager.window.move(x, y)
 
 
-def drawHistogram(hist, useScaleMultiplier, windowName="Histogram"):
+def drawHistogram(hist, windowName="Histogram"):
 	import tkinter as tk
 	# draw = ImageDraw.Draw(img)		# Might use in the near future
 	# display = ImageTk.PhotoImage(img)	# Might use in the near future
@@ -63,8 +65,11 @@ def drawHistogram(hist, useScaleMultiplier, windowName="Histogram"):
 	steps = numIntensities					# Number of x-values in histogram
 	step_size = (canvWidth-2*windowMargin) // steps		# For visuals only
 	
-	if useScaleMultiplier:	vertScale = canvHeight-(2*windowMargin)
-	else:			vertScale = 1		# Already scaled before this function was called, so don't scale again.
+	# Max height of any individual column in the histogram should be as tall as the histogram, NOT TALLER.
+	scalableHist = unitize1Darray(hist)
+	vertScale = canvHeight-(2*windowMargin)
+	# if useScaleMultiplier:	vertScale = canvHeight-(2*windowMargin)
+	# else:			vertScale = 1		# Already scaled before this function was called, so don't scale again.
 
 	root = tk.Tk()
 	root.title(windowName)
@@ -80,7 +85,7 @@ def drawHistogram(hist, useScaleMultiplier, windowName="Histogram"):
 	for x in range(windowMargin, canvWidth, step_size):
 		pixelIntensity = (x-windowMargin) // step_size
 		if pixelIntensity < numIntensities:
-			y_end = y_bottom - int((hist[pixelIntensity])*vertScale)
+			y_end = y_bottom - int((scalableHist[pixelIntensity])*vertScale)
 			vertLine = [(x, y_bottom), (x, y_end)]
 			canv.create_line(vertLine, fill="black",width=1)
 #			print(pixelIntensity, vertLine)	##########
@@ -337,13 +342,13 @@ def myMethod(numIntensities, drawHist, useCDFtransform=False, useGammaTransform=
 	
 	# Get pixel intensity values of image, put them into an array
 	# Default array precision is int32, so change to whatever precision the image uses.
-	arr = np.array(img.getdata(), dtype=bitPrecision_boxImg)
+#	arr = np.array(img.getdata(), dtype=bitPrecision_boxImg)
 	# OR
 	imgArr_2d = np.asarray( img, dtype=bitPrecision_boxImg )
 	imgArr_1d = imgArr_2d.flatten()	# 2D-img -> 1D-img  (how it works: Each row gets concatenated (appended) to previous row)
 
-	numRows = len(imgArr_2d)	# len([[rowStart,...,rowEnd],[rowStart,...,rowEnd],...])
-	numCols = len(imgArr_2d[0])	# len([rowStart,...,rowEnd])
+#	numRows = len(imgArr_2d)	# len([[rowStart,...,rowEnd],[rowStart,...,rowEnd],...])
+#	numCols = len(imgArr_2d[0])	# len([rowStart,...,rowEnd])
 #	print( numRows, numCols )	##########
 
 	# Create 1D-histogram array of source(original)(unmodified) image with length=numIntensities
@@ -396,9 +401,29 @@ def myMethod(numIntensities, drawHist, useCDFtransform=False, useGammaTransform=
 	
 	# Display regular picture's histogram, maybe also equalized-histogram. Uses Tkinter.
 	if drawHist:
-		drawHistogram(hist=unitizedHistogram, useScaleMultiplier=True, windowName="Unmodified Histogram of Image")
+		drawHistogram(hist=unitizedHistogram, windowName="Unmodified Histogram of Image")
 		if useImgTransformation:
-			drawHistogram(hist=equalizedImg_1d, useScaleMultiplier=False, windowName="Transformed Histogram of Image")
+			drawHistogram(hist=getHistogram(equalizedImg_1d, numIntensities),
+				windowName="Transformed Histogram of Image")
+	
+	if saveModdedImg:
+		# This is a 2d array. Do NOT use a 1d array, which will cause each
+		#	pixel to be treated as its own row, meaning the image will be a
+		#	single pixel wide (a single column).
+		im = Image.fromarray(equalizedImg_2d)
+		# print(im.size)	# Print numPixels for each dimension.
+
+		modType = ""
+		if useCDFtransform:
+			modType = "CDF"
+		elif useGammaTransform:
+			modType = "Gamma"
+		
+		fileSuffix = ".jpg"	# Cannot be JPG if (>65500 pixels PER DIMENSION)
+		# Discard the ".\\" of the filename by "picURL[2:]"  ("\\" is a single character long").
+		# Discard the three-letter file suffix and the dot by "picURL[:-4]"
+		filename_savedModdedImg = picURL[2:-4] + " " + modType + "Equalized" + fileSuffix
+		im.save(filename_savedModdedImg, quality=100)	# 100% compression quality (if lossy method is used)
 
 
 	# Display regular picture, maybe also equalized-histogram picture. Uses matplotlib.
